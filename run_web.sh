@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # Move to the system root
-cd ~/core_system || exit
+cd ~/Novum || exit
 
 # Kill any previous Flask server
 pkill -f interface.web 2>/dev/null
