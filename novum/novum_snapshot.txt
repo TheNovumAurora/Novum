@@ -1,0 +1,423 @@
+===== TREE =====
+.
+├── archive
+│   └── novum_core_backup.py
+├── commands
+│   └── __init__.py
+├── core
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-312.pyc
+│   │   ├── command.cpython-312.pyc
+│   │   └── memory.cpython-312.pyc
+│   ├── command.py
+│   └── memory.py
+├── data
+│   └── memory.json
+├── interface
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-312.pyc
+│   │   └── web.cpython-312.pyc
+│   ├── templates
+│   │   └── console.html
+│   └── web.py
+├── launch_novum.sh
+├── main.py
+├── memory.json
+├── novum_snapshot.txt
+├── requirements.txt
+└── run_web.sh
+
+9 directories, 20 files
+
+===== FILES =====
+
+----- ./core/memory.py -----
+import json
+import os
+
+MEMORY_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory.json")
+
+
+def load_memory():
+    """Load memory from JSON file. Returns a list of entries."""
+    if not os.path.exists(MEMORY_FILE):
+        return []
+
+    try:
+        with open(MEMORY_FILE, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            else:
+                return []
+    except json.JSONDecodeError:
+        return []
+
+
+def add_entry(entry: str):
+    """Add a new entry to memory, avoiding duplicates."""
+    memory = load_memory()
+    memory.append(entry)
+    # Optional: remove exact duplicates
+    memory = list(dict.fromkeys(memory))
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(memory, f, indent=2)
+
+----- ./core/command.py -----
+import os
+import json
+from core.memory import load_memory, add_entry
+
+DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory.json")
+
+
+def handle_command(command: str):
+    """
+    Main command handler for Novum.
+    Returns a list of strings to display in the UI.
+    """
+    command = command.strip().lower()
+    output = []
+
+    # --- Show full memory ---
+    if command == "show memory":
+        memory = load_memory() or []
+        if memory:
+            output.append("Memory contents:")
+            output.extend(memory)
+        else:
+            output.append("Memory is empty.")
+
+    # --- Search memory ---
+    elif command.startswith("search "):
+        term = command[7:].strip().lower()
+        memory = load_memory() or []
+        matches = [m for m in memory if term in m.lower()]
+        if matches:
+            output.append(f"Search results for '{term}':")
+            output.extend(matches)
+        else:
+            output.append(f"No entries found for '{term}'.")
+
+    # --- Organize memory ---
+    elif command == "organize":
+        memory = load_memory() or []
+        organized = sorted(memory, key=lambda x: x.lower())
+        if organized:
+            output.append("Memory organized alphabetically:")
+            output.extend(organized)
+            # Save organized memory
+            with open(DATA_FILE, "w") as f:
+                json.dump(organized, f, indent=2)
+        else:
+            output.append("Memory is empty. Nothing to organize.")
+
+    # --- Systems check ---
+    elif command == "systems check":
+        # Placeholder for real system check logic
+        output.append("Running systems check...")
+        output.append("All systems operational.")  # you can expand with real checks later
+
+    # --- Help / unknown command ---
+    elif command == "help":
+        output.append("Available commands:")
+        output.append(" - show memory : Display all memory entries")
+        output.append(" - search <term> : Search memory for a keyword")
+        output.append(" - organize : Organize memory alphabetically")
+        output.append(" - systems check : Run system diagnostics")
+        output.append(" - help : Show this help message")
+
+    else:
+        # If command isn’t recognized, log it and respond
+        add_entry(f"Unknown command: {command}")
+        output.append(f"Command not recognized: '{command}'")
+        output.append("Type 'help' for available commands.")
+
+    return output
+
+----- ./core/__init__.py -----
+
+----- ./interface/web.py -----
+from flask import Flask, render_template, request
+import random
+import os
+import sys
+
+# Ensure Python sees core modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.memory import load_memory, add_entry
+from core.command import handle_command
+
+# Explicitly tell Flask where templates are
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), "templates"))
+
+GREETINGS = [
+    "What ideas do you have today?",
+    "Hello, Ty.",
+    "Welcome back.",
+    "Good to see you.",
+    "Ready to log something?"
+]
+
+@app.route("/", methods=["GET", "POST"])
+def home():
+    greeting = random.choice(GREETINGS)
+    output = None
+
+    if request.method == "POST":
+        text = request.form.get("text", "").strip()
+        output_lines = []
+
+        if text:
+        # Handle the command first
+            result = handle_command(text)
+
+            if result is not None:
+            # Only save valid command outputs
+                add_entry(text)
+                if isinstance(result, list):
+                    output_lines.extend(result)
+                else:
+                    output_lines.append(result)
+            else:
+            # Unknown commands are shown but NOT saved
+                output_lines.append(f"Unknown command: {text}")
+        output = "\n".join(output_lines) if output_lines else ""
+    return render_template("console.html", greeting=greeting, output=output)
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
+----- ./interface/__init__.py -----
+
+----- ./interface/templates/console.html -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novum Console</title>
+<style>
+body {
+    background-color: #1a0000;
+    color: #ff6666;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+    min-height: 100vh;
+}
+h1 {
+    margin-bottom: 1rem;
+}
+form {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    max-width: 500px;
+}
+input[type="text"] {
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: none;
+    margin-bottom: 1rem;
+    font-family: monospace;
+    font-size: 1rem;
+}
+button {
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: none;
+    background-color: #660000;
+    color: #ff9999;
+    font-weight: bold;
+    cursor: pointer;
+}
+button:hover {
+    background-color: #990000;
+}
+.output {
+    margin-top: 1rem;
+    width: 90%;
+    max-width: 500px;
+    padding: 1rem;
+    background-color: #330000;
+    border-radius: 8px;
+    white-space: pre-wrap; /* preserves newlines */
+    overflow-x: auto;
+}
+</style>
+</head>
+<body>
+<h1>{{ greeting }}</h1>
+<form method="POST">
+    <input type="text" name="text" placeholder="Enter a command..." autofocus>
+    <button type="submit">Send</button>
+</form>
+
+{% if output %}
+<div class="output">{{ output | e }}</div>
+{% endif %}
+
+</body>
+</html>
+
+----- ./data/memory.json -----
+[
+  "Helo",
+  "Help",
+  "Log test",
+  "Memory",
+  "Organize",
+  "Show memory",
+  "System",
+  "System check",
+  "Systems check",
+  "Testing the logging aspect of Novum. #test1 #memory",
+  "Unknown command: helo",
+  "Unknown command: log test",
+  "Unknown command: memory",
+  "Unknown command: testing the logging aspect of novum. #test1 #memory"
+]
+----- ./archive/novum_core_backup.py -----
+import os
+import datetime
+
+# -------------------
+# CONFIGURATION
+# -------------------
+MEMORY_FILE = "memory.txt"
+DEFAULT_IMPORTANCE = 5
+
+# -------------------
+# MEMORY UTILITIES
+# -------------------
+def load_memory():
+    if not os.path.exists(MEMORY_FILE):
+        return []
+    with open(MEMORY_FILE, "r") as f:
+        return [line.strip() for line in f.readlines()]
+
+def save_memory(entry):
+    with open(MEMORY_FILE, "a") as f:
+        f.write(entry + "\n")
+
+# -------------------
+# TAGGING UTILITIES
+# -------------------
+def extract_tags(text):
+    return [word[1:].lower() for word in text.split() if word.startswith("#")]
+
+# -------------------
+# ENTRY FUNCTIONS
+# -------------------
+def add_entry(text, importance=DEFAULT_IMPORTANCE, memory=None):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tags = extract_tags(text)
+    tag_string = ",".join(tags) if tags else "none"
+    entry = f"[{timestamp}] | imp:{importance} | tags:{tag_string} | {text}"
+
+    save_memory(entry)
+    if memory is not None:
+        memory.append(entry)
+
+    return {"status": "stored", "tags": tags, "importance": importance, "entry": entry}
+
+# -------------------
+# SEARCH
+# -------------------
+def search_memory(keyword, memory):
+    keyword = keyword.lower()
+    results = []
+    for line in memory:
+        try:
+            ts_part, imp_part, tags_part, content_part = [p.strip() for p in line.split("|")]
+            if keyword in content_part.lower() or keyword in tags_part.lower():
+                results.append(line)
+        except ValueError:
+            if keyword in line.lower():
+                results.append(line)
+    return results
+
+# -------------------
+# REFLECTION
+# -------------------
+def reflect(memory):
+    tag_counts = {}
+    high_importance = []
+
+    for line in memory:
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) == 4:
+            ts, imp_part, tags_part, content_part = parts
+            try:
+                imp = int(imp_part.replace("imp:", ""))
+            except:
+                imp = DEFAULT_IMPORTANCE
+        elif len(parts) == 3:
+            ts, tags_part, content_part = parts
+            imp = DEFAULT_IMPORTANCE
+        else:
+            continue
+
+        for tag in tags_part.replace("tags:", "").split(","):
+            if tag != "none":
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+        if imp >= 8:
+            high_importance.append(content_part)
+
+    top_tag = max(tag_counts, key=tag_counts.get) if tag_counts else None
+    return {"top_tag": top_tag, "high_importance": high_importance[-5:]}
+
+----- ./memory.json -----
+[
+  "Unknown command: novum help",
+  "Novum help"
+]
+----- ./main.py -----
+import webbrowser
+import threading
+from interface.web import app
+from core.command import load_commands
+
+def open_browser():
+    import time
+    time.sleep(1)  # Wait for Flask to start
+    webbrowser.open("http://127.0.0.1:5000/")
+    load_commands()
+
+if __name__ == "__main__":
+    threading.Thread(target=open_browser).start()
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
+----- ./run_web.sh -----
+#!/data/data/com.termux/files/usr/bin/bash
+
+# Go to project root
+cd ~/novum || exit
+
+# Set Python path so imports work
+export PYTHONPATH="$PWD"
+
+# Start Flask server in background
+python3 interface/web.py &
+
+# Give Flask a few seconds to start
+sleep 2
+
+# Open browser automatically
+termux-open-url http://127.0.0.1:5000
+
+----- ./launch_novum.sh -----
+#!/data/data/com.termux/files/usr/bin/bash
+cd ~/novum || exit
+
+# Run the existing run_web.sh script
+./run_web.sh
+
+----- ./commands/__init__.py -----
