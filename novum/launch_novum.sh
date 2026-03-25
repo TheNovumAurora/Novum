@@ -6,9 +6,16 @@ cd "$(dirname "$0")" || exit 1
 # Run the Flask web interface in the background
 ./run_web.sh &
 
-# Give Flask a few seconds to start
+python3 -m novum.main &
+
 sleep 3
 
-# Open the preferred browser on Android via Termux
-# termux-open-url will open the default browser
-termux-open-url "http://127.0.0.1:5000"
+if command -v termux-open-url >/dev/null 2>&1; then
+    termux-open-url http://127.0.0.1:5000
+elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open http://127.0.0.1:5000
+elif command -v open >/dev/null 2>&1; then
+    open http://127.0.0.1:5000
+else
+    echo "Open browser: http://127.0.0.1:5000"
+fi
