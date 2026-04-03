@@ -1,11 +1,9 @@
+from core.command import COMMANDS
+
 def run(args):
-    return [
-        "Available commands:",
-        "show memory",
-        "search <term>",
-        "organize",
-        "systems check",
-        "help",
-        "export",
-        "import_backup"
-    ]
+    output = ["Available commands:"]
+
+    for cmd in sorted(COMMANDS.keys()):
+        output.append(f" - {cmd}")
+
+    return output
