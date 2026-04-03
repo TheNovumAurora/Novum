@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Novum Console</title>
+<style>
+
+body {
+    margin: 0;
+    font-family: monospace;
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e293b;
+    padding: 10px 20px;
+    border-bottom: 1px solid #334155;
+}
+
+.title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.status {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.container {
+    display: flex;
+    height: calc(100vh - 50px);
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+}
+
+.console-panel {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #334155;
+    height: 100%;
+}
+
+.feed-panel {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.panel-title {
+    padding: 10px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+}
+
+#output {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.input-bar {
+    display: flex;
+    border-top: 1px solid #334155;
+}
+
+#command-input {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    background: #020617;
+    color: white;
+    font-family: monospace;
+    font-size: 16px;
+}
+.command-block {
+    margin-bottom: 16px;
+    padding: 10px;
+    background: #020617;
+    border-left: 3px solid #38bdf8;
+}
+
+.command-input-line {
+    color: #38bdf8;
+    margin-bottom: 6px;
+}
+
+.command-output-line {
+    margin-left: 8px;
+    line-height: 1.4;
+}
+.message {
+    margin: 12px 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-message {
+    align-items: flex-end;
+}
+
+.novum-message {
+    align-items: flex-start;
+}
+
+.bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    line-height: 1.4;
+}
+
+.user-bubble {
+    background: #38bdf8;
+    color: black;
+}
+
+.novum-bubble {
+    background: #020617;
+    border: 1px solid #334155;
+}
+
+.sender {
+    font-size: 12px;
+    margin-bottom: 3px;
+    color: #94a3b8;
+}
+
+#send-btn {
+    background: #38bdf8;
+    border: none;
+    padding: 0 18px;
+    font-weight: bold;
+    color: black;
+    cursor: pointer;
+}
+
+#send-btn:active {
+    background: #0ea5e9;
+}
+
+#feed p {
+    margin: 5px 0;
+    color: #cbd5f5;
+}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="title">Novum Aurora</div>
+    <div class="status">
+        System Online | Users: 1 | Modules: 0
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="console-panel">
+        <div class="panel-title">Command Console</div>
+        <div id="output"></div>
+
+        <div class="input-bar">
+            <input id="command-input" type="text" placeholder="Enter command..." autocomplete="off">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <div class="feed-panel">
+        <div class="panel-title">Activity Feed</div>
+        <div id="feed">
+            <p>Novum initialized.</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const input = document.getElementById("command-input");
+const output = document.getElementById("output");
+const sendBtn = document.getElementById("send-btn");
+
+// Auto-focus on click
+input.focus();
+document.addEventListener("click", () => input.focus());
+
+// Send command function
+function sendCommand() {
+
+    const command = input.value.trim();
+    if(command === "") return;
+
+    // show user message
+    const userMsg = document.createElement("div");
+    userMsg.className = "message user-message";
+
+    const userBubble = document.createElement("div");
+    userBubble.className = "bubble user-bubble";
+    userBubble.textContent = command;
+
+    userMsg.appendChild(userBubble);
+    output.appendChild(userMsg);
+
+    fetch("/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({command})
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        const novumMsg = document.createElement("div");
+        novumMsg.className = "message novum-message";
+
+        const novumBubble = document.createElement("div");
+        novumBubble.className = "bubble novum-bubble";
+
+        data.output.forEach(line => {
+            const div = document.createElement("div");
+            div.textContent = line;
+            novumBubble.appendChild(div);
+        });
+
+        novumMsg.appendChild(novumBubble);
+        output.appendChild(novumMsg);
+
+        addFeedEntry("Command executed: " + command);
+
+        input.value = "";
+        output.scrollTop = output.scrollHeight;
+    })
+    .catch(err => {
+        addFeedEntry("Error executing command: " + command);
+    });
+
+}
+
+// Enter key triggers send
+input.addEventListener("keydown", e => {
+    if(e.key === "Enter"){
+        e.preventDefault();
+        sendCommand();
+    }
+});
+
+// Send button triggers send
+sendBtn.addEventListener("click", sendCommand);
+
+// Feed helper
+function addFeedEntry(text) {
+    const feed = document.getElementById("feed");
+    const entry = document.createElement("p");
+    entry.textContent = text;
+    feed.prepend(entry);
+}
+</script>
+
+</body>
+</html>
